@@ -6,7 +6,7 @@
 
 <br>
 
-<img src="docs/screenshots/list.png" width="180" alt="Recordings list — derived label, mm:ss duration and file size per row">&nbsp;<img src="docs/screenshots/recording.png" width="180" alt="Recording — serif mm:ss counter, live size, and a lowercase stop verb">&nbsp;<img src="docs/screenshots/playing.png" width="180" alt="Inline playback — hairline scrubber and 0:43 / 1:12 · stop on a single row">&nbsp;<img src="docs/screenshots/settings.png" width="180" alt="Settings — font preset, format, sample rate, bulk export, privacy posture">
+<img src="docs/screenshots/list.png" width="180" alt="Recordings list — derived label, mm:ss duration and file size per row">&nbsp;<img src="docs/screenshots/recording.png" width="180" alt="Recording — serif mm:ss counter, live size, and a lowercase stop verb">&nbsp;<img src="docs/screenshots/playing.png" width="180" alt="Inline playback — draggable hairline scrubber with −15 / stop / +15 verbs and elapsed-of-total time">&nbsp;<img src="docs/screenshots/settings.png" width="180" alt="Settings — font preset, format, sample rate, bulk export, privacy posture">
 
 <br>
 
@@ -21,7 +21,7 @@ It declares no internet permission. It ships no analytics. It depends on neither
 ## What Still Voice does
 
 - A reverse-chronological list of recordings as the home screen, each row showing **derived label, `mm:ss` duration, and file size**.
-- Tap a row to **play it inline**: a 1dp hairline scrubber animates across the row, a small filled square marks the playing row, and the bottom caption reads `0:43 / 1:12  ·  stop`. Drag the scrubber to seek.
+- Tap a row to **play it inline**: a 1dp hairline scrubber animates across the row, a small filled square marks the playing row, and the bottom row reads `0:06 / 0:12   −15   stop   +15`. Tap or drag the scrubber to seek; tap `−15` / `+15` to jump fifteen seconds.
 - A **recording bar** pinned to the bottom of the list. Idle: a single lowercase `record` verb. Recording: a serif `mm:ss` counter, live file size, and a `stop` verb. The counter ticks at 1Hz, not 60Hz.
 - A **foreground service** keeps the recording alive while the screen is off or the app is backgrounded, with a sticky notification showing the live elapsed time and a `stop` action. It is the only notification this app ever posts.
 - **Long-press a row** for an inline action sheet: `rename`, `share`, `export`, `delete`. Delete asks for a second tap to confirm.

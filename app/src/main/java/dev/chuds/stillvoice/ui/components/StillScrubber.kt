@@ -23,8 +23,8 @@ import dev.chuds.stillvoice.ui.theme.StillColors
  * 1dp hairline scrubber. SoftWhite filled portion, Hairline runway. No knob,
  * no handle — the filled-vs-unfilled split is the indicator.
  *
- * `progress` is 0..1. `onSeek` is called with the new 0..1 fraction on tap or
- * during a drag.
+ * The visible line is 1dp, but the touch target wraps it in a 32dp tall
+ * transparent box so taps and drags actually land without sub-pixel precision.
  */
 @Composable
 fun StillScrubber(
@@ -38,8 +38,7 @@ fun StillScrubber(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(1.dp)
-            .background(StillColors.Hairline)
+            .height(32.dp)
             .onSizeChanged { widthPx = it.width.toFloat() }
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
@@ -51,13 +50,21 @@ fun StillScrubber(
                     if (widthPx > 0f) onSeek((change.position.x / widthPx).coerceIn(0f, 1f))
                 }
             },
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(clamped)
-                .fillMaxHeight()
-                .background(StillColors.SoftWhite),
-        )
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(StillColors.Hairline),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(clamped)
+                    .fillMaxHeight()
+                    .background(StillColors.SoftWhite),
+            )
+        }
     }
 }

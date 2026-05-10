@@ -108,6 +108,7 @@ fun RecordingsListScreen(
                                 actionTarget = recording.id
                             },
                             onSeek = { fraction -> onSeek(recording, fraction) },
+                            onStop = onStopPlayback,
                         )
                         StillDivider()
                     }
@@ -210,6 +211,7 @@ private fun RecordingRow(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onSeek: (Float) -> Unit,
+    onStop: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     Column(
@@ -243,7 +245,7 @@ private fun RecordingRow(
         }
 
         if (isPlaying) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             val total = playback.durationMs.takeIf { it > 0 }
                 ?: recording.durationMs.takeIf { it > 0 }
                 ?: 1L
@@ -253,12 +255,41 @@ private fun RecordingRow(
                 progress = progress,
                 onSeek = onSeek,
             )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "${formatMmSs(playback.positionMs)} / ${formatMmSs(total)}   ·   stop",
-                style = StillTypography.Caption,
-                color = StillColors.MutedWhite,
-            )
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${formatMmSs(playback.positionMs)} / ${formatMmSs(total)}",
+                    style = StillTypography.Caption,
+                    color = StillColors.MutedWhite,
+                )
+                Spacer(Modifier.weight(1f))
+                StillVerb(
+                    text = "−15",
+                    onClick = {
+                        val target = (playback.positionMs - 15_000L).coerceAtLeast(0L)
+                        onSeek(target.toFloat() / total.toFloat())
+                    },
+                    style = StillTypography.Caption,
+                    color = StillColors.MutedWhite,
+                )
+                Spacer(Modifier.width(20.dp))
+                StillVerb(
+                    text = "stop",
+                    onClick = onStop,
+                    style = StillTypography.Caption,
+                    color = StillColors.MutedWhite,
+                )
+                Spacer(Modifier.width(20.dp))
+                StillVerb(
+                    text = "+15",
+                    onClick = {
+                        val target = (playback.positionMs + 15_000L).coerceAtMost(total)
+                        onSeek(target.toFloat() / total.toFloat())
+                    },
+                    style = StillTypography.Caption,
+                    color = StillColors.MutedWhite,
+                )
+            }
         } else {
             Spacer(Modifier.height(4.dp))
             Text(
