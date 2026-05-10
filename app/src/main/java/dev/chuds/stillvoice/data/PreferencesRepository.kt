@@ -3,6 +3,7 @@ package dev.chuds.stillvoice.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -20,11 +21,13 @@ private val Context.preferencesDataStore: DataStore<Preferences> by preferencesD
 private val FONT_PRESET_KEY = stringPreferencesKey("font_preset")
 private val FORMAT_KEY = stringPreferencesKey("format")
 private val SAMPLE_RATE_KEY = intPreferencesKey("sample_rate_hz")
+private val HAPTICS_ENABLED_KEY = booleanPreferencesKey("haptics_enabled")
 
 data class VoiceSettings(
     val fontPreset: FontPreset = FontPreset.System,
     val format: AudioFormat = AudioFormat.M4A_AAC,
     val sampleRateHz: Int = 44_100,
+    val hapticsEnabled: Boolean = true,
 )
 
 class PreferencesRepository(private val context: Context) {
@@ -42,6 +45,7 @@ class PreferencesRepository(private val context: Context) {
                     ?.let { runCatching { AudioFormat.valueOf(it) }.getOrNull() }
                     ?: AudioFormat.M4A_AAC,
                 sampleRateHz = prefs[SAMPLE_RATE_KEY] ?: 44_100,
+                hapticsEnabled = prefs[HAPTICS_ENABLED_KEY] ?: true,
             )
         }
 
@@ -55,5 +59,9 @@ class PreferencesRepository(private val context: Context) {
 
     suspend fun setSampleRate(hz: Int) {
         context.preferencesDataStore.edit { it[SAMPLE_RATE_KEY] = hz }
+    }
+
+    suspend fun setHapticsEnabled(enabled: Boolean) {
+        context.preferencesDataStore.edit { it[HAPTICS_ENABLED_KEY] = enabled }
     }
 }

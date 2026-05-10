@@ -52,10 +52,16 @@ class RecordingsRepository(context: Context) {
     /**
      * Called by RecordingService after MediaRecorder.stop() succeeds. Adds the
      * new recording to the index and emits the new list.
+     *
+     * Re-reads index.json from disk under the mutex before merging: the service
+     * holds its own RecordingsRepository instance whose in-memory _recordings
+     * is empty on a cold start, so trusting the in-memory value would clobber
+     * the index with just the new recording.
      */
     suspend fun adopt(recording: Recording): Recording = withContext(Dispatchers.IO) {
         ioMutex.withLock {
-            val next = listOf(recording) + _recordings.value.filterNot { it.id == recording.id }
+            val onDisk = readIndex() ?: emptyList()
+            val next = listOf(recording) + onDisk.filterNot { it.id == recording.id }
             writeIndex(next)
             _recordings.value = next.sortedDescending()
             recording

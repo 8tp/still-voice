@@ -41,6 +41,7 @@ fun SettingsScreen(
     onCycleFontPreset: () -> Unit,
     onCycleFormat: () -> Unit,
     onCycleSampleRate: () -> Unit,
+    onToggleHaptics: () -> Unit,
     onBulkExport: () -> Unit,
     onDeleteAll: () -> Unit,
     onBack: () -> Unit,
@@ -100,6 +101,15 @@ fun SettingsScreen(
             )
             StillDivider()
             StillMenuItem(
+                title = "haptic feedback",
+                subtitle = if (settings.hapticsEnabled)
+                    "on  ·  subtle vibration on taps"
+                else
+                    "off  ·  subtle vibration on taps",
+                onClick = onToggleHaptics,
+            )
+            StillDivider()
+            StillMenuItem(
                 title = "bulk export",
                 subtitle = if (recordingCount == 0) "no recordings yet" else
                     "save every recording as one zip",
@@ -123,29 +133,6 @@ fun SettingsScreen(
                 titleColor = if (deleteArmed) StillColors.SoftWhite else StillColors.SoftWhite,
             )
 
-            Spacer(Modifier.height(36.dp))
-            Text(
-                text = "PRIVACY POSTURE, IN CODE",
-                style = StillTypography.Kicker,
-                color = StillColors.Gray,
-            )
-            Spacer(Modifier.height(12.dp))
-            PrivacyLine("AndroidManifest.xml", "four permissions, none for the network")
-            PrivacyLine("xml/data_extraction_rules.xml", "excludes everything from cloud backup")
-            PrivacyLine("xml/file_paths.xml", "FileProvider exposes only recordings/")
-            PrivacyLine("app/build.gradle.kts", "AndroidX + Compose + DataStore only")
-
-            Spacer(Modifier.height(36.dp))
-            Text(
-                text = "STILL ECOSYSTEM",
-                style = StillTypography.Kicker,
-                color = StillColors.Gray,
-            )
-            Spacer(Modifier.height(12.dp))
-            EcosystemLine("launcher")
-            EcosystemLine("notes")
-            EcosystemLine("cal")
-
             Spacer(Modifier.height(64.dp))
         }
 
@@ -158,35 +145,14 @@ fun SettingsScreen(
                 .padding(horizontal = 24.dp, vertical = 22.dp),
             horizontalArrangement = Arrangement.Start,
         ) {
-            StillVerb(text = "back", onClick = onBack, color = StillColors.MutedWhite)
+            StillVerb(
+                text = "back",
+                onClick = onBack,
+                color = StillColors.MutedWhite,
+                bordered = true,
+            )
         }
     }
-}
-
-@Composable
-private fun PrivacyLine(file: String, what: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(
-            text = file,
-            style = StillTypography.Caption,
-            color = StillColors.MutedWhite,
-        )
-        Text(
-            text = what,
-            style = StillTypography.Caption,
-            color = StillColors.DimGray,
-        )
-    }
-}
-
-@Composable
-private fun EcosystemLine(name: String) {
-    Text(
-        text = name,
-        style = StillTypography.Caption,
-        color = StillColors.DimGray,
-        modifier = Modifier.padding(vertical = 2.dp),
-    )
 }
 
 private fun formatLabel(format: AudioFormat): String = when (format) {

@@ -1,14 +1,11 @@
 package dev.chuds.stillvoice.ui.list
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,23 +74,24 @@ fun RecordingBar(
                 )
             }
             RecorderState.Idle -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                // record is the focal action and stays truly centered via Box;
+                // settings sits on the right as a bordered secondary verb so
+                // it reads as a button without competing with record.
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    StillVerb(
+                        text = "record",
+                        onClick = onRecord,
+                        color = StillColors.SoftWhite,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                     StillVerb(
                         text = "settings",
                         onClick = onSettings,
                         style = StillTypography.Caption,
                         color = StillColors.MutedWhite,
+                        bordered = true,
+                        modifier = Modifier.align(Alignment.CenterEnd),
                     )
-                    StillVerb(
-                        text = "record",
-                        onClick = onRecord,
-                        color = StillColors.SoftWhite,
-                    )
-                    Spacer(Modifier.size(1.dp))
                 }
                 if (!micGranted) {
                     Text(

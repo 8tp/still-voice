@@ -15,7 +15,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chuds.stillvoice.data.AudioFormat
 import dev.chuds.stillvoice.data.PreferencesRepository
@@ -30,6 +32,7 @@ import dev.chuds.stillvoice.player.PlayerController
 import dev.chuds.stillvoice.recorder.LocalRecorderController
 import dev.chuds.stillvoice.recorder.RecorderController
 import dev.chuds.stillvoice.recorder.RecorderState
+import dev.chuds.stillvoice.ui.components.LocalHaptics
 import dev.chuds.stillvoice.ui.list.RecordingsListScreen
 import dev.chuds.stillvoice.ui.rename.RenameScreen
 import dev.chuds.stillvoice.ui.settings.SettingsScreen
@@ -77,6 +80,17 @@ fun StillVoiceApp(initialOpenRecordingState: Boolean = false) {
     var route by remember { mutableStateOf<Route>(Route.List) }
     var pendingRecordTrigger by remember { mutableStateOf(false) }
     var micGranted by remember { mutableStateOf(recorderController.hasMicPermission()) }
+
+    // Listen for the service-side finalize signal. The service owns its own
+    // RecordingsRepository instance, so the UI's repository must reload from
+    // disk to see the new recording. Then we navigate to RenameScreen so the
+    // user can name it immediately (cancel restores the auto-derived label).
+    LaunchedEffect(recorderController) {
+        recorderController.finalized.collect { id ->
+            recordingsRepository.load()
+            route = Route.Rename(id)
+        }
+    }
 
     val recordPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -180,10 +194,22 @@ fun StillVoiceApp(initialOpenRecordingState: Boolean = false) {
 
     val typography = remember(settings.fontPreset) { stillTypographyFor(settings.fontPreset) }
 
+    // Bind LocalHaptics to the user's preference. StillVerb invokes this before
+    // the click; flipping the toggle replaces the lambda with a no-op.
+    val systemHaptics = LocalHapticFeedback.current
+    val hapticPerformer: () -> Unit = remember(settings.hapticsEnabled, systemHaptics) {
+        if (settings.hapticsEnabled) {
+            { systemHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+        } else {
+            { /* no-op */ }
+        }
+    }
+
     CompositionLocalProvider(
         LocalStillTypography provides typography,
         LocalRecorderController provides recorderController,
         LocalPlayerController provides playerController,
+        LocalHaptics provides hapticPerformer,
     ) {
         when (val current = route) {
             Route.List -> {
@@ -251,6 +277,11 @@ fun StillVoiceApp(initialOpenRecordingState: Boolean = false) {
                     onCycleSampleRate = {
                         scope.launch {
                             preferencesRepository.setSampleRate(cycleSampleRate(settings.sampleRateHz))
+                        }
+                    },
+                    onToggleHaptics = {
+                        scope.launch {
+                            preferencesRepository.setHapticsEnabled(!settings.hapticsEnabled)
                         }
                     },
                     onBulkExport = ::startBulkExport,

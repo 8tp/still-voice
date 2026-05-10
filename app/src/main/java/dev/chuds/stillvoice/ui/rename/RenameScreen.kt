@@ -102,10 +102,16 @@ fun RenameScreen(
                 .padding(horizontal = 24.dp, vertical = 22.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            StillVerb(text = "cancel", onClick = onCancel, color = StillColors.MutedWhite)
+            StillVerb(
+                text = "cancel",
+                onClick = onCancel,
+                color = StillColors.MutedWhite,
+                bordered = true,
+            )
             StillVerb(
                 text = "save",
                 onClick = { onSave(draft.trim().takeIf { it.isNotEmpty() }) },
+                bordered = true,
             )
         }
     }
