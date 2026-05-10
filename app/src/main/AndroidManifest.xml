@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android manifest for Still Voice.
+
+    Privacy posture (matches still-launcher / still-notes / still-cal):
+    - No INTERNET permission. Ever.
+    - No analytics, telemetry, no transcription, no on-device ML, no audio-DSP library.
+    - Recordings are stored as plain audio files in app-private storage.
+
+    Permissions (each disclosed honestly in the README):
+    - RECORD_AUDIO:                  Required to capture from the microphone. Asked at runtime
+                                     the first time the user taps `record`.
+    - FOREGROUND_SERVICE:            Required on Android 9+ to keep the recording alive while
+                                     the screen is off or the app is backgrounded. Without it,
+                                     a one-hour recording becomes a thirty-second recording the
+                                     instant the user looks at any other app.
+    - FOREGROUND_SERVICE_MICROPHONE: Required on Android 14+ as the specialization of
+                                     FOREGROUND_SERVICE for services that use the microphone.
+                                     The OS rejects starting an mic-using foreground service
+                                     without this declaration.
+    - POST_NOTIFICATIONS:            Required on Android 13+ to surface the foreground-service
+                                     notification. The system will silently kill the foreground
+                                     service if the notification can't appear, so this is a
+                                     hard requirement of the recording feature, not a marketing
+                                     channel — Still Voice posts exactly one notification, only
+                                     while a recording is in progress, and never any other.
+
+    None of the four involves the network or any third-party SDK.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@drawable/ic_still_voice_launcher"
+        android:roundIcon="@drawable/ic_still_voice_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.StillVoice"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Holds the MediaRecorder instance for the lifetime of an active recording.
+            foregroundServiceType="microphone" pairs with the FOREGROUND_SERVICE_MICROPHONE
+            permission above. Not exported — only the in-process RecorderController starts it.
+        -->
+        <service
+            android:name=".recorder.RecordingService"
+            android:foregroundServiceType="microphone"
+            android:exported="false" />
+
+        <!--
+            Used only to share recordings out via ACTION_SEND. Restricts file access to the
+            recordings/ subdirectory of filesDir — see res/xml/file_paths.xml. Other apps
+            cannot read anything else through this provider.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

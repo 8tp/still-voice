@@ -1,0 +1,8 @@
+<!-- App strings. Keep names short and quiet, like the launcher and notes. -->
+<resources>
+    <string name="app_name">Still Voice</string>
+    <string name="recording_channel_name">recording</string>
+    <string name="recording_channel_description">foreground notification shown while a recording is in progress</string>
+    <string name="recording_notification_title">recording</string>
+    <string name="recording_notification_action_stop">stop</string>
+</resources>

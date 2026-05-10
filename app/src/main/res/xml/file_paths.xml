@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Paths exposed via the FileProvider declared in AndroidManifest.xml.
+
+    Only `recordings/` under filesDir is shared. The index.json sitting beside it stays private
+    so other apps can never see the recordings list — they only see the audio file the user
+    explicitly chose to share.
+-->
+<paths>
+    <files-path name="recordings" path="recordings/" />
+</paths>
