@@ -4,6 +4,10 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import java.io.File
 import java.io.OutputStream
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +39,8 @@ class RecordingsRepository(context: Context) {
 
     suspend fun load() = withContext(Dispatchers.IO) {
         ioMutex.withLock {
-            val loaded = reconcileRecordings(readIndex(), scanRecordingsFromDisk())
+            val indexed = readIndex()
+            val loaded = reconcileRecordings(indexed, scanRecordingsFromDisk(indexed))
             writeIndex(loaded)
             _recordings.value = loaded.sortedDescending()
         }
@@ -59,7 +64,8 @@ class RecordingsRepository(context: Context) {
      */
     suspend fun adopt(recording: Recording): Recording = withContext(Dispatchers.IO) {
         ioMutex.withLock {
-            val onDisk = reconcileRecordings(readIndex(), scanRecordingsFromDisk())
+            val indexed = readIndex()
+            val onDisk = reconcileRecordings(indexed, scanRecordingsFromDisk(indexed))
             val next = listOf(recording) + onDisk.filterNot { it.id == recording.id }
             writeIndex(next)
             _recordings.value = next.sortedDescending()
@@ -139,30 +145,20 @@ class RecordingsRepository(context: Context) {
         }.getOrNull()
     }
 
-    private fun scanRecordingsFromDisk(): List<Recording> {
+    private fun scanRecordingsFromDisk(indexed: List<Recording>?): List<Recording> {
+        val indexedByFileName = indexed.orEmpty().associateBy { it.fileNameKey() }
         val files = recordingsDir.listFiles { f ->
             f.extension == "m4a" || f.extension == "wav"
         } ?: emptyArray()
 
-        val recordings = files.mapNotNull { file ->
-            val id = file.nameWithoutExtension
-            val format = when (file.extension) {
-                "wav" -> AudioFormat.WAV_PCM
-                else -> AudioFormat.M4A_AAC
+        return files.mapNotNull { file ->
+            val indexedRecording = indexedByFileName[file.name]
+            if (indexedRecording != null) {
+                recordingFromIndexedFile(file, indexedRecording)
+            } else {
+                recordingFromOrphanFile(file, ::readDurationMsFromFile)
             }
-            val timestamp = file.lastModified().takeIf { it > 0 } ?: System.currentTimeMillis()
-            val durationMs = readDurationMsFromFile(file) ?: 0L
-            Recording(
-                id = id,
-                label = null,
-                recordedAt = timestamp,
-                durationMs = durationMs,
-                sizeBytes = file.length(),
-                format = format,
-                sampleRateHz = 44_100,
-            )
         }
-        return recordings
     }
 
     private fun readDurationMsFromFile(file: File): Long? = runCatching {
@@ -213,6 +209,105 @@ internal fun reconcileRecordings(
 }
 
 private fun Recording.fileNameKey(): String = "$id.${format.extension}"
+
+internal fun recordingFromIndexedFile(
+    file: File,
+    indexed: Recording,
+): Recording? {
+    val sizeBytes = file.length().takeIf { it > 0 } ?: return null
+    return indexed.copy(sizeBytes = sizeBytes)
+}
+
+internal fun recordingFromOrphanFile(
+    file: File,
+    durationReader: (File) -> Long?,
+): Recording? {
+    val format = when (file.extension.lowercase(Locale.US)) {
+        "m4a" -> AudioFormat.M4A_AAC
+        "wav" -> AudioFormat.WAV_PCM
+        else -> return null
+    }
+    val sizeBytes = file.length().takeIf { it > 0 } ?: return null
+    val durationMs = when (format) {
+        AudioFormat.M4A_AAC -> durationReader(file)?.takeIf { it > 0 } ?: return null
+        AudioFormat.WAV_PCM -> readWavPcmDurationMs(file)?.takeIf { it > 0 }
+            ?: durationReader(file)?.takeIf { it > 0 }
+            ?: return null
+    }
+    val timestamp = file.lastModified().takeIf { it > 0 } ?: System.currentTimeMillis()
+    return Recording(
+        id = file.nameWithoutExtension,
+        label = null,
+        recordedAt = timestamp,
+        durationMs = durationMs,
+        sizeBytes = sizeBytes,
+        format = format,
+        sampleRateHz = 44_100,
+    )
+}
+
+internal fun readWavPcmDurationMs(file: File): Long? = runCatching {
+    RandomAccessFile(file, "r").use { raf ->
+        if (raf.length() < 44) return@runCatching null
+        if (raf.readAscii(4) != "RIFF") return@runCatching null
+        raf.readLeInt()
+        if (raf.readAscii(4) != "WAVE") return@runCatching null
+
+        var sampleRate = 0
+        var channels = 0
+        var bitsPerSample = 0
+        var dataBytes = 0L
+
+        while (raf.filePointer + 8 <= raf.length()) {
+            val chunkId = raf.readAscii(4)
+            val chunkSize = raf.readLeInt()
+            val chunkStart = raf.filePointer
+            when (chunkId) {
+                "fmt " -> {
+                    if (chunkSize < 16) return@runCatching null
+                    val audioFormat = raf.readLeShort()
+                    channels = raf.readLeShort()
+                    sampleRate = raf.readLeInt().toInt()
+                    raf.readLeInt() // byte rate
+                    raf.readLeShort() // block align
+                    bitsPerSample = raf.readLeShort()
+                    if (audioFormat != 1) return@runCatching null
+                }
+                "data" -> {
+                    dataBytes = chunkSize
+                }
+            }
+            val next = chunkStart + chunkSize + (chunkSize % 2)
+            if (next > raf.length()) return@runCatching null
+            raf.seek(next)
+            if (dataBytes > 0) break
+        }
+
+        if (sampleRate <= 0 || channels <= 0 || bitsPerSample <= 0 || dataBytes <= 0) {
+            return@runCatching null
+        }
+        val bytesPerSecond = sampleRate.toLong() * channels * bitsPerSample / 8
+        if (bytesPerSecond <= 0) null else dataBytes * 1_000L / bytesPerSecond
+    }
+}.getOrNull()
+
+private fun RandomAccessFile.readAscii(length: Int): String {
+    val bytes = ByteArray(length)
+    readFully(bytes)
+    return String(bytes, Charsets.US_ASCII)
+}
+
+private fun RandomAccessFile.readLeInt(): Long {
+    val bytes = ByteArray(4)
+    readFully(bytes)
+    return Integer.toUnsignedLong(ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).int)
+}
+
+private fun RandomAccessFile.readLeShort(): Int {
+    val bytes = ByteArray(2)
+    readFully(bytes)
+    return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xffff
+}
 
 /**
  * Default label fallback for an unnamed recording — `Wed-May-13-09-14`.
