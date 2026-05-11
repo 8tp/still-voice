@@ -35,7 +35,8 @@ class RecordingsRepository(context: Context) {
 
     suspend fun load() = withContext(Dispatchers.IO) {
         ioMutex.withLock {
-            val loaded = readIndex() ?: rebuildIndexFromDisk()
+            val loaded = reconcileRecordings(readIndex(), scanRecordingsFromDisk())
+            writeIndex(loaded)
             _recordings.value = loaded.sortedDescending()
         }
     }
@@ -58,7 +59,7 @@ class RecordingsRepository(context: Context) {
      */
     suspend fun adopt(recording: Recording): Recording = withContext(Dispatchers.IO) {
         ioMutex.withLock {
-            val onDisk = readIndex() ?: emptyList()
+            val onDisk = reconcileRecordings(readIndex(), scanRecordingsFromDisk())
             val next = listOf(recording) + onDisk.filterNot { it.id == recording.id }
             writeIndex(next)
             _recordings.value = next.sortedDescending()
@@ -138,7 +139,7 @@ class RecordingsRepository(context: Context) {
         }.getOrNull()
     }
 
-    private fun rebuildIndexFromDisk(): List<Recording> {
+    private fun scanRecordingsFromDisk(): List<Recording> {
         val files = recordingsDir.listFiles { f ->
             f.extension == "m4a" || f.extension == "wav"
         } ?: emptyArray()
@@ -161,7 +162,6 @@ class RecordingsRepository(context: Context) {
                 sampleRateHz = 44_100,
             )
         }
-        writeIndex(recordings)
         return recordings
     }
 
@@ -194,6 +194,25 @@ class RecordingsRepository(context: Context) {
     private fun List<Recording>.sortedDescending(): List<Recording> =
         sortedByDescending { it.recordedAt }
 }
+
+internal fun reconcileRecordings(
+    indexed: List<Recording>?,
+    disk: List<Recording>,
+): List<Recording> {
+    val diskByFileName = disk.associateBy { it.fileNameKey() }
+    val keptIndexed = indexed.orEmpty().mapNotNull { recording ->
+        val file = diskByFileName[recording.fileNameKey()] ?: return@mapNotNull null
+        recording.copy(
+            durationMs = recording.durationMs.takeIf { it > 0 } ?: file.durationMs,
+            sizeBytes = file.sizeBytes,
+        )
+    }
+    val keptKeys = keptIndexed.mapTo(mutableSetOf()) { it.fileNameKey() }
+    val orphans = disk.filterNot { it.fileNameKey() in keptKeys }
+    return (keptIndexed + orphans).sortedByDescending { it.recordedAt }
+}
+
+private fun Recording.fileNameKey(): String = "$id.${format.extension}"
 
 /**
  * Default label fallback for an unnamed recording — `Wed-May-13-09-14`.
