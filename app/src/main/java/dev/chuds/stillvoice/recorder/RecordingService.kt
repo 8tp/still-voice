@@ -249,7 +249,7 @@ class RecordingService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_still_voice_launcher)
+            .setSmallIcon(R.drawable.ic_still_voice_notification)
             .setContentTitle(getString(R.string.recording_notification_title))
             .setContentText(formatMmSs(elapsedSeconds))
             .setOngoing(true)
