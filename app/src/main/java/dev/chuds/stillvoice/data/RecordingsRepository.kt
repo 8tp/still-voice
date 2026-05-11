@@ -231,20 +231,79 @@ internal fun recordingFromOrphanFile(
     val durationMs = when (format) {
         AudioFormat.M4A_AAC -> durationReader(file)?.takeIf { it > 0 } ?: return null
         AudioFormat.WAV_PCM -> readWavPcmDurationMs(file)?.takeIf { it > 0 }
+            ?: recoverWavWithEmptyDataChunk(file)?.takeIf { it > 0 }
             ?: durationReader(file)?.takeIf { it > 0 }
             ?: return null
     }
+    val recoveredSize = file.length().takeIf { it > 0 } ?: sizeBytes
     val timestamp = file.lastModified().takeIf { it > 0 } ?: System.currentTimeMillis()
     return Recording(
         id = file.nameWithoutExtension,
         label = null,
         recordedAt = timestamp,
         durationMs = durationMs,
-        sizeBytes = sizeBytes,
+        sizeBytes = recoveredSize,
         format = format,
         sampleRateHz = 44_100,
     )
 }
+
+/**
+ * Recovery path for a WAV that was killed mid-record: the writer thread laid
+ * down a valid RIFF header with dataSize=0, then process death prevented
+ * WavRecorder.stop() from patching the final size. The raw PCM frames are
+ * still on disk past byte 44. Parse the fmt chunk, infer dataBytes from the
+ * file length, patch the header in place so subsequent reads succeed via the
+ * normal readWavPcmDurationMs path, and return the recovered duration.
+ *
+ * Intentionally WAV-only — M4A truncation is unrecoverable without the moov
+ * atom that MediaRecorder writes at stop().
+ */
+internal fun recoverWavWithEmptyDataChunk(file: File): Long? = runCatching {
+    val length = file.length()
+    if (length <= 44) return@runCatching null
+
+    RandomAccessFile(file, "rw").use { raf ->
+        if (raf.readAscii(4) != "RIFF") return@runCatching null
+        raf.readLeInt()
+        if (raf.readAscii(4) != "WAVE") return@runCatching null
+        if (raf.readAscii(4) != "fmt ") return@runCatching null
+        val fmtChunkSize = raf.readLeInt()
+        if (fmtChunkSize < 16) return@runCatching null
+        val audioFormat = raf.readLeShort()
+        val channels = raf.readLeShort()
+        val sampleRate = raf.readLeInt().toInt()
+        val byteRate = raf.readLeInt().toInt()
+        raf.readLeShort() // block align
+        val bitsPerSample = raf.readLeShort()
+        if (audioFormat != 1 || sampleRate <= 0 || channels <= 0 ||
+            bitsPerSample <= 0 || byteRate <= 0
+        ) {
+            return@runCatching null
+        }
+        val fmtEnd = 12L + 8L + fmtChunkSize + (fmtChunkSize % 2)
+        if (fmtEnd + 8 > length) return@runCatching null
+        raf.seek(fmtEnd)
+        if (raf.readAscii(4) != "data") return@runCatching null
+        val existingDataSize = raf.readLeInt()
+        if (existingDataSize != 0L) return@runCatching null
+
+        val dataBytes = length - (fmtEnd + 8)
+        if (dataBytes <= 0) return@runCatching null
+
+        raf.seek(4)
+        val riffSize = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+            .putInt((dataBytes + (fmtEnd + 8) - 8).toInt())
+        raf.write(riffSize.array())
+
+        raf.seek(fmtEnd + 4)
+        val dataSize = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(dataBytes.toInt())
+        raf.write(dataSize.array())
+
+        dataBytes * 1_000L / byteRate.toLong()
+    }
+}.getOrNull()
 
 internal fun readWavPcmDurationMs(file: File): Long? = runCatching {
     RandomAccessFile(file, "r").use { raf ->

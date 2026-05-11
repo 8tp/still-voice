@@ -74,6 +74,46 @@ class RecordingIndexReconcileTest {
         }
     }
 
+    @Test fun diskScanRecoversWavWithHeaderClaimingZeroDataButPcmOnDisk() {
+        val dir = createTempDirectory("still-voice-wav-recover").toFile()
+        try {
+            // Simulate process kill mid-record: WavRecorder wrote a 44-byte header
+            // with dataSize=0 and then 88_200 PCM bytes (one second @ 44.1kHz
+            // mono 16-bit). stop() never ran to patch the header.
+            val killed = File(dir, "killed.wav").apply {
+                writeBytes(wavBytes(dataBytes = 0) + ByteArray(88_200))
+            }
+
+            val recording = recordingFromOrphanFile(killed) { null }
+
+            assertEquals("killed", recording?.id)
+            assertEquals(1_000L, recording?.durationMs)
+            assertEquals(AudioFormat.WAV_PCM, recording?.format)
+            assertEquals(44L + 88_200L, recording?.sizeBytes)
+
+            // Header should now be patched so a normal read works the next time.
+            assertEquals(1_000L, readWavPcmDurationMs(killed))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test fun diskScanDoesNotAttemptM4aTruncationRecovery() {
+        val dir = createTempDirectory("still-voice-m4a-trunc").toFile()
+        try {
+            // M4A without a moov atom is unrecoverable — only orphan recovery
+            // available is the duration probe via MediaMetadataRetriever, which
+            // we stub to fail here. recordingFromOrphanFile must drop the file.
+            val truncated = File(dir, "truncated.m4a").apply {
+                writeBytes(byteArrayOf(0, 0, 0, 0, 1, 2, 3, 4))
+            }
+
+            assertNull(recordingFromOrphanFile(truncated) { null })
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test fun diskScanKeepsIndexedFileWhenDurationProbeFails() {
         val dir = createTempDirectory("still-voice-indexed").toFile()
         try {
