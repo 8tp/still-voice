@@ -4,6 +4,8 @@
 
 #### A quiet voice recorder for Android.
 
+part of the [still](../STILL.md) family. the pact governs every line of code in this repo.
+
 <br>
 
 <img src="docs/screenshots/list.png" width="180" alt="Recordings list — derived label, mm:ss duration and file size per row">&nbsp;<img src="docs/screenshots/recording.png" width="180" alt="Recording — serif mm:ss counter, live size, and a lowercase stop verb">&nbsp;<img src="docs/screenshots/playing.png" width="180" alt="Inline playback — draggable hairline scrubber with −15 / stop / +15 verbs and elapsed-of-total time">&nbsp;<img src="docs/screenshots/settings.png" width="180" alt="Settings — font preset, format, sample rate, bulk export, privacy posture">
