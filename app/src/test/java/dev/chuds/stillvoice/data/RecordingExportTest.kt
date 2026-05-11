@@ -96,7 +96,23 @@ class RecordingExportTest {
         }
 
         assertEquals("Missing recording file for missing: ${missingFile.path}", error.message)
-        assertEquals(emptyList<String>(), unzip(out.toByteArray()).map { it.name })
+        assertEquals(0, out.size())
+    }
+
+    @Test fun bulkExportPreflightsAllFilesBeforeWritingAnyZipEntry() {
+        val recordingsDir = temp.newFolder("recordings")
+        val first = recording(id = "first", label = "Present file")
+        val missing = recording(id = "missing", label = "Missing file")
+        val missingFile = recordingFile(recordingsDir, missing)
+        recordingFile(recordingsDir, first).writeBytes(byteArrayOf(1, 2, 3))
+        val out = ByteArrayOutputStream()
+
+        val error = assertThrows(FileNotFoundException::class.java) {
+            writeRecordingsZip(listOf(first, missing), out) { recordingFile(recordingsDir, it) }
+        }
+
+        assertEquals("Missing recording file for missing: ${missingFile.path}", error.message)
+        assertEquals(0, out.size())
     }
 
     private fun recording(

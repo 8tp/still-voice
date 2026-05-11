@@ -25,16 +25,17 @@ internal fun writeRecordingsZip(
     output: OutputStream,
     fileForRecording: (Recording) -> File,
 ) {
+    val files = recordings.map { recording ->
+        val file = fileForRecording(recording)
+        if (!file.isFile) {
+            throw FileNotFoundException("Missing recording file for ${recording.id}: ${file.path}")
+        }
+        recording to file
+    }
+
     ZipOutputStream(output).use { zip ->
         val seen = HashSet<String>()
-        recordings.forEach { recording ->
-            val file = fileForRecording(recording)
-            // Missing indexed files make the export incomplete; fail before adding a ZipEntry
-            // so callers do not receive misleading empty audio files.
-            if (!file.isFile) {
-                throw FileNotFoundException("Missing recording file for ${recording.id}: ${file.path}")
-            }
-
+        files.forEach { (recording, file) ->
             file.inputStream().use { input ->
                 zip.putNextEntry(ZipEntry(uniqueExportFilenameFor(recording, seen)))
                 input.copyTo(zip)
