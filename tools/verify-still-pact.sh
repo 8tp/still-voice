@@ -192,6 +192,14 @@ def merged_manifests():
         for path in intermediates.glob(pattern):
             resolved = path.resolve()
             if path.is_file() and resolved not in seen:
+                # The androidTest APK is a separate test-only APK that never ships
+                # to users; its merged manifest is the union of the app manifest
+                # and AndroidX test-runner manifests (which add REORDER_TASKS and
+                # a <queries> block). The pact governs what users install, not
+                # what runs on a developer's instrumentation harness.
+                rel_parts = path.relative_to(root).parts
+                if any("androidtest" in part.lower() for part in rel_parts):
+                    continue
                 seen.add(resolved)
                 paths.append(path)
     return sorted(paths)
