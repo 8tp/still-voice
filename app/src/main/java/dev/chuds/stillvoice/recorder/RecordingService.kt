@@ -176,8 +176,12 @@ class RecordingService : Service() {
             wavRecorder = null
         }
 
-        if (id != null && file != null && keep && file.exists() && file.length() > 0) {
-            val durationMs = readDurationMs(file) ?: (System.currentTimeMillis() - startedAtMs)
+        val durationMs = if (id != null && file != null && keep && hasAudioPayload(file, format)) {
+            readDurationMs(file)?.takeIf { it >= MIN_KEEP_DURATION_MS }
+        } else {
+            null
+        }
+        if (id != null && file != null && durationMs != null) {
             val recording = Recording(
                 id = id,
                 label = null,
@@ -189,7 +193,10 @@ class RecordingService : Service() {
             )
             persistFinalized(recording, synchronous)
         } else {
-            // stop() too soon after start, or a write failure — drop the partial file.
+            // stop() too soon after start, write failure, or no decodable
+            // payload — drop the partial file. We refuse to fall back to
+            // wall-clock duration: a successful MediaMetadataRetriever probe
+            // is the only evidence the file actually contains audio.
             file?.delete()
             RecorderBus.state.value = RecorderState.Idle
             currentId = null
@@ -199,6 +206,7 @@ class RecordingService : Service() {
             stopSelf()
         }
     }
+
 
     /**
      * Adopt the finalized recording and tear the service down. adopt() reads
@@ -391,5 +399,28 @@ class RecordingService : Service() {
             val seconds = totalSeconds % 60
             return "%d:%02d".format(minutes, seconds)
         }
+    }
+}
+
+/** Floor for a recording to be worth keeping. Below this the user almost
+ *  certainly stopped instantly after starting and wouldn't expect a row
+ *  to appear in the list. */
+internal const val MIN_KEEP_DURATION_MS = 100L
+
+/**
+ * Format-aware floor for "this file plausibly contains audio frames." Used
+ * in finalizeAndStop to drop header-only files before they get indexed with
+ * a wall-clock duration that would otherwise produce a phantom row that
+ * plays zero audio.
+ */
+internal fun hasAudioPayload(file: File, format: AudioFormat): Boolean {
+    if (!file.exists()) return false
+    val length = file.length()
+    return when (format) {
+        // WAV: the 44-byte RIFF header alone is meaningless without PCM frames.
+        AudioFormat.WAV_PCM -> length > 44
+        // M4A: a moov-only or near-empty MP4 box stream produces no audio.
+        // 1KiB is a pragmatic floor — real recordings are far larger.
+        AudioFormat.M4A_AAC -> length > 1024
     }
 }
