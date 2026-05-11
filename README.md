@@ -40,7 +40,7 @@ It declares no internet permission. It ships no analytics. It depends on neither
 | `RECORD_AUDIO` | The only way to capture from the microphone. Asked the first time the user taps `record`. |
 | `FOREGROUND_SERVICE` | Required on Android 9+ to keep the recording alive while the screen is off or the app is backgrounded. Without it, a one-hour recording becomes a thirty-second one the moment the user looks at any other app. |
 | `FOREGROUND_SERVICE_MICROPHONE` | Required on Android 14+ as the specialization of `FOREGROUND_SERVICE` for services that use the microphone. The OS rejects starting a mic-using foreground service without it. |
-| `POST_NOTIFICATIONS` | Required on Android 13+ to surface the foreground-service notification. The system silently kills the foreground service if the notification can't appear. Still Voice posts exactly one notification, only while a recording is in progress. |
+| `POST_NOTIFICATIONS` | Requested on Android 13+ so the ongoing recording notification can appear in the notification shade. Denial does not block recording; the foreground service still runs with Android's required disclosure surface. Still Voice posts exactly one notification, only while a recording is in progress. |
 
 What Still Voice refuses to do:
 
