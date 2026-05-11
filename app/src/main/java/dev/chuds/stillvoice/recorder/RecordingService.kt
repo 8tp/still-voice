@@ -43,6 +43,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class RecordingService : Service() {
 
@@ -185,11 +186,7 @@ class RecordingService : Service() {
                 format = format,
                 sampleRateHz = sampleRate,
             )
-            scope.launch {
-                repository.adopt(recording)
-                RecorderBus.finalized.emit(id)
-                RecorderBus.state.value = RecorderState.Idle
-            }
+            persistFinalized(recording)
         } else {
             // stop() too soon after start, or a write failure — drop the partial file.
             file?.delete()
@@ -202,6 +199,17 @@ class RecordingService : Service() {
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun persistFinalized(recording: Recording) {
+        runCatching {
+            // Must complete before stopSelf(): onDestroy() cancels the service scope.
+            runBlocking {
+                repository.adopt(recording)
+                RecorderBus.finalized.emit(recording.id)
+            }
+        }
+        RecorderBus.state.value = RecorderState.Idle
     }
 
     private fun startTicker() {

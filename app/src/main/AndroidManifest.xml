@@ -18,12 +18,12 @@
                                      FOREGROUND_SERVICE for services that use the microphone.
                                      The OS rejects starting an mic-using foreground service
                                      without this declaration.
-    - POST_NOTIFICATIONS:            Required on Android 13+ to surface the foreground-service
-                                     notification. The system will silently kill the foreground
-                                     service if the notification can't appear, so this is a
-                                     hard requirement of the recording feature, not a marketing
-                                     channel — Still Voice posts exactly one notification, only
-                                     while a recording is in progress, and never any other.
+    - POST_NOTIFICATIONS:            Requested on Android 13+ so the ongoing recording
+                                     notification can appear in the shade. Denial does not
+                                     block recording; the foreground service still runs with
+                                     Android's required disclosure surface. Still Voice posts
+                                     exactly one notification, only while a recording is in
+                                     progress, and never any other.
 
     None of the four involves the network or any third-party SDK.
 -->

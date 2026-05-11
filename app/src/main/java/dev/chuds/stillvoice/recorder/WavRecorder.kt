@@ -77,10 +77,12 @@ class WavRecorder(
     fun stop() {
         if (!running) return
         running = false
+        val ar = recorder
+        runCatching { ar?.stop() }
         runCatching { thread?.join(1_000) }
-        runCatching { recorder?.stop() }
-        runCatching { recorder?.release() }
+        runCatching { ar?.release() }
         recorder = null
+        thread = null
         // Patch the RIFF header with the final sizes.
         val file = raf
         if (file != null) {
@@ -95,10 +97,12 @@ class WavRecorder(
 
     fun cancel() {
         running = false
+        val ar = recorder
+        runCatching { ar?.stop() }
         runCatching { thread?.join(500) }
-        runCatching { recorder?.stop() }
-        runCatching { recorder?.release() }
+        runCatching { ar?.release() }
         recorder = null
+        thread = null
         runCatching { raf?.close() }
         raf = null
         outputFile.delete()
