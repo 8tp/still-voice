@@ -79,7 +79,29 @@ class WavRecorder(
         running = false
         val ar = recorder
         runCatching { ar?.stop() }
-        runCatching { thread?.join(1_000) }
+        // Drain the writer thread *before* touching the RandomAccessFile. A
+        // bare join(1_000) timeout would let the writer thread keep calling
+        // file.write while the main thread does file.seek(0) +
+        // writeHeader, corrupting the RIFF header. ar.stop() above breaks
+        // the writer out of ar.read() promptly; the bounded poll below is
+        // only a defensive ceiling in case the loop is wedged.
+        val t = thread
+        if (t != null) {
+            val deadline = System.nanoTime() + 10_000_000_000L
+            while (t.isAlive && System.nanoTime() < deadline) {
+                runCatching { t.join(100) }
+            }
+            if (t.isAlive) {
+                // Writer is wedged — leave the file untouched rather than race
+                // a header patch against an in-flight write. Caller can still
+                // recover via recoverWavWithEmptyDataChunk on the next scan.
+                recorder = null
+                thread = null
+                raf = null
+                runCatching { ar?.release() }
+                return
+            }
+        }
         runCatching { ar?.release() }
         recorder = null
         thread = null
