@@ -1,6 +1,7 @@
 package dev.chuds.stillvoice.data
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -27,9 +28,17 @@ internal fun writeRecordingsZip(
     ZipOutputStream(output).use { zip ->
         val seen = HashSet<String>()
         recordings.forEach { recording ->
-            zip.putNextEntry(ZipEntry(uniqueExportFilenameFor(recording, seen)))
             val file = fileForRecording(recording)
-            if (file.exists()) zip.write(file.readBytes())
+            // Missing indexed files make the export incomplete; fail before adding a ZipEntry
+            // so callers do not receive misleading empty audio files.
+            if (!file.isFile) {
+                throw FileNotFoundException("Missing recording file for ${recording.id}: ${file.path}")
+            }
+
+            file.inputStream().use { input ->
+                zip.putNextEntry(ZipEntry(uniqueExportFilenameFor(recording, seen)))
+                input.copyTo(zip)
+            }
             zip.closeEntry()
         }
     }

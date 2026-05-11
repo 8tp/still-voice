@@ -2,9 +2,11 @@ package dev.chuds.stillvoice.data
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.FileNotFoundException
 import java.util.zip.ZipInputStream
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -25,6 +27,17 @@ class RecordingExportTest {
         )
     }
 
+    @Test fun unicodeOnlyLabelsUseRecordingFallbackFilename() {
+        assertEquals(
+            "recording.m4a",
+            exportFilenameFor(recording(label = "東京")),
+        )
+        assertEquals(
+            "recording.wav",
+            exportFilenameFor(recording(label = "🎙️", format = AudioFormat.WAV_PCM)),
+        )
+    }
+
     @Test fun uniqueFilenameMappingKeepsDuplicateLabelsDistinct() {
         val seen = mutableSetOf<String>()
         val first = recording(id = "a", label = "Daily Standup", format = AudioFormat.M4A_AAC)
@@ -32,6 +45,15 @@ class RecordingExportTest {
 
         assertEquals("Daily-Standup.m4a", uniqueExportFilenameFor(first, seen))
         assertEquals("Daily-Standup-1.m4a", uniqueExportFilenameFor(second, seen))
+    }
+
+    @Test fun uniqueFilenameMappingKeepsUnicodeOnlyLabelsDistinct() {
+        val seen = mutableSetOf<String>()
+        val first = recording(id = "a", label = "東京", format = AudioFormat.M4A_AAC)
+        val second = recording(id = "b", label = "🎙️", format = AudioFormat.M4A_AAC)
+
+        assertEquals("recording.m4a", uniqueExportFilenameFor(first, seen))
+        assertEquals("recording-1.m4a", uniqueExportFilenameFor(second, seen))
     }
 
     @Test fun bulkExportZipHasRootEntriesWithUniqueFilenamesAndBytes() {
@@ -61,6 +83,20 @@ class RecordingExportTest {
         assertArrayEquals(payloads.getValue("a"), entries[0].bytes)
         assertArrayEquals(payloads.getValue("b"), entries[1].bytes)
         assertArrayEquals(payloads.getValue("c"), entries[2].bytes)
+    }
+
+    @Test fun bulkExportFailsForMissingFilesBeforeCreatingZipEntry() {
+        val recordingsDir = temp.newFolder("recordings")
+        val missing = recording(id = "missing", label = "Missing file")
+        val missingFile = recordingFile(recordingsDir, missing)
+        val out = ByteArrayOutputStream()
+
+        val error = assertThrows(FileNotFoundException::class.java) {
+            writeRecordingsZip(listOf(missing), out) { recordingFile(recordingsDir, it) }
+        }
+
+        assertEquals("Missing recording file for missing: ${missingFile.path}", error.message)
+        assertEquals(emptyList<String>(), unzip(out.toByteArray()).map { it.name })
     }
 
     private fun recording(
