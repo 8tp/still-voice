@@ -36,6 +36,7 @@ import dev.chuds.stillvoice.data.Recording
 import dev.chuds.stillvoice.data.RecordingsRepository
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -143,7 +144,7 @@ class RecordingService : Service() {
         startTicker()
     }
 
-    private fun finalizeAndStop() {
+    private fun finalizeAndStop(synchronous: Boolean = false) {
         val id = currentId
         val file = currentFile
         val format = currentFormat
@@ -186,30 +187,67 @@ class RecordingService : Service() {
                 format = format,
                 sampleRateHz = sampleRate,
             )
-            persistFinalized(recording)
+            persistFinalized(recording, synchronous)
         } else {
             // stop() too soon after start, or a write failure — drop the partial file.
             file?.delete()
             RecorderBus.state.value = RecorderState.Idle
+            currentId = null
+            currentFile = null
+            startedAtMs = 0L
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
-
-        currentId = null
-        currentFile = null
-        startedAtMs = 0L
-
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
-    private fun persistFinalized(recording: Recording) {
-        runCatching {
-            // Must complete before stopSelf(): onDestroy() cancels the service scope.
-            runBlocking {
+    /**
+     * Adopt the finalized recording and tear the service down. adopt() reads
+     * index.json, scans every audio file under filesDir, and runs
+     * MediaMetadataRetriever on each unindexed file — running that on the
+     * main thread (where onStartCommand dispatches ACTION_STOP_RECORDING)
+     * is ANR-class work once the user has accumulated many recordings.
+     *
+     * For the normal ACTION_STOP_RECORDING flow (synchronous=false) we
+     * launch on Dispatchers.IO and defer stopSelf() until adopt completes
+     * — the Service stays alive in the meantime because we have not yet
+     * called stopSelf(). For the process-kill path from onDestroy()
+     * (synchronous=true) the Service is already being torn down and the
+     * scope is about to be cancelled, so we block on a worker thread to
+     * preserve the best-effort persistence semantics.
+     */
+    private fun persistFinalized(recording: Recording, synchronous: Boolean) {
+        if (synchronous) {
+            val latch = CountDownLatch(1)
+            Thread({
+                runCatching {
+                    runBlocking {
+                        repository.adopt(recording)
+                        RecorderBus.finalized.emit(recording.id)
+                    }
+                }
+                latch.countDown()
+            }, "still-voice-finalize").start()
+            runCatching { latch.await() }
+            RecorderBus.state.value = RecorderState.Idle
+            currentId = null
+            currentFile = null
+            startedAtMs = 0L
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            runCatching {
                 repository.adopt(recording)
                 RecorderBus.finalized.emit(recording.id)
             }
+            RecorderBus.state.value = RecorderState.Idle
+            currentId = null
+            currentFile = null
+            startedAtMs = 0L
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
-        RecorderBus.state.value = RecorderState.Idle
     }
 
     private fun startTicker() {
@@ -327,9 +365,11 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
-        // Process-kill path: best-effort finalize so the next app open shows the recording.
+        // Process-kill path: best-effort finalize so the next app open shows
+        // the recording. Synchronous because scope.cancel() runs next and the
+        // Service is already terminating — there's no opportunity to defer.
         if (mediaRecorder != null || wavRecorder != null) {
-            finalizeAndStop()
+            finalizeAndStop(synchronous = true)
         }
         scope.cancel()
         super.onDestroy()
