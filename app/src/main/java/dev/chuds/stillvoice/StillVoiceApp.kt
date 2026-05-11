@@ -24,7 +24,7 @@ import dev.chuds.stillvoice.data.PreferencesRepository
 import dev.chuds.stillvoice.data.RecordingsRepository
 import dev.chuds.stillvoice.data.VoiceSettings
 import dev.chuds.stillvoice.data.buildShareIntent
-import dev.chuds.stillvoice.data.timestampLabel
+import dev.chuds.stillvoice.data.exportFilenameFor
 import dev.chuds.stillvoice.data.writeFileToUri
 import dev.chuds.stillvoice.data.writeZipToUri
 import dev.chuds.stillvoice.player.LocalPlayerController
@@ -158,11 +158,8 @@ fun StillVoiceApp(initialOpenRecordingState: Boolean = false) {
 
     fun startSingleExport(id: String) {
         val recording = recordings.firstOrNull { it.id == id } ?: return
-        val baseName = recordingsRepository.deriveBaseName(recording)
-        val safe = baseName.replace(Regex("[^A-Za-z0-9._\\- ]"), "").trim().replace(' ', '-')
-            .ifEmpty { "recording" }
         exportTarget = ExportTarget.Single(id)
-        exportSingleLauncher.launch("$safe.${recording.format.extension}")
+        exportSingleLauncher.launch(exportFilenameFor(recording))
     }
 
     fun startBulkExport() {

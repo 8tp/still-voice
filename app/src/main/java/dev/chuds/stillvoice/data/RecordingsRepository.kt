@@ -4,8 +4,6 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import java.io.File
 import java.io.OutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -111,22 +109,7 @@ class RecordingsRepository(context: Context) {
      * SAF-provided OutputStream.
      */
     suspend fun exportZip(output: OutputStream) = withContext(Dispatchers.IO) {
-        ZipOutputStream(output).use { zip ->
-            val seen = HashSet<String>()
-            _recordings.value.forEach { recording ->
-                val baseName = safeFilename(deriveBaseName(recording))
-                val ext = recording.format.extension
-                var name = "$baseName.$ext"
-                var counter = 1
-                while (!seen.add(name)) {
-                    name = "$baseName-${counter++}.$ext"
-                }
-                zip.putNextEntry(ZipEntry(name))
-                val file = recordingFile(recording)
-                if (file.exists()) zip.write(file.readBytes())
-                zip.closeEntry()
-            }
-        }
+        writeRecordingsZip(_recordings.value, output, ::recordingFile)
     }
 
     fun deriveBaseName(recording: Recording): String =
@@ -210,11 +193,6 @@ class RecordingsRepository(context: Context) {
 
     private fun List<Recording>.sortedDescending(): List<Recording> =
         sortedByDescending { it.recordedAt }
-
-    private fun safeFilename(input: String): String {
-        val cleaned = input.replace(Regex("[^A-Za-z0-9._\\- ]"), "").trim()
-        return (if (cleaned.isEmpty()) "recording" else cleaned).take(80).replace(' ', '-')
-    }
 }
 
 /**
